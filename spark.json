@@ -1,6 +1,6 @@
 {
     "name": "MAX30100",
-    "version": "0.0.1",
+    "version": "0.1",
     "author": "Vignesh <viggi1000@gmail.com>",
     "license": "MIT",
     "description": "Port of oxullo Intersecans library"
