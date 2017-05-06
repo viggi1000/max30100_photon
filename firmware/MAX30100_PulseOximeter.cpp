@@ -1,6 +1,6 @@
 /*
-Port of the Oxullo Interscans library for Particle Photon/Electron.
-Work by Vignesh Ravichandran (hello@rvignesh.xyz).
+Arduino-MAX30100 oximetry / heart rate integrated sensor library
+Copyright (C) 2016  OXullo Intersecans <x@brainrapers.org>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,7 +28,10 @@ PulseOximeter::PulseOximeter() :
     tsLastSample(0),
     tsLastBiasCheck(0),
     tsLastCurrentAdjustment(0),
-    redLedPower((uint8_t)RED_LED_CURRENT_START),
+    tsLastTemperaturePoll(0),
+    redLedCurrentIndex((uint8_t)RED_LED_CURRENT_START),
+    irLedCurrent(DEFAULT_IR_LED_CURRENT),
+    temperature(0),
     onBeatDetected(NULL)
 {
 }
@@ -39,18 +42,24 @@ void PulseOximeter::begin(PulseOximeterDebuggingMode debuggingMode_)
 
     hrm.begin();
     hrm.setMode(MAX30100_MODE_SPO2_HR);
-    hrm.setLedsCurrent(IR_LED_CURRENT, RED_LED_CURRENT_START);
+    hrm.setLedsCurrent(irLedCurrent, (LEDCurrent)redLedCurrentIndex);
 
     irDCRemover = DCRemover(DC_REMOVER_ALPHA);
     redDCRemover = DCRemover(DC_REMOVER_ALPHA);
 
     state = PULSEOXIMETER_STATE_IDLE;
+
+    // Start temperature sampling and wait for its completion (blocking)
+    hrm.startTemperatureSampling();
+    while (!hrm.isTemperatureReady());
+    temperature = hrm.retrieveTemperature();
 }
 
 void PulseOximeter::update()
 {
     checkSample();
     checkCurrentBias();
+    checkTemperature();
 }
 
 float PulseOximeter::getHeartRate()
@@ -65,12 +74,23 @@ uint8_t PulseOximeter::getSpO2()
 
 uint8_t PulseOximeter::getRedLedCurrentBias()
 {
-    return redLedPower;
+    return redLedCurrentIndex;
+}
+
+float PulseOximeter::getTemperature()
+{
+    return temperature;
 }
 
 void PulseOximeter::setOnBeatDetectedCallback(void (*cb)())
 {
     onBeatDetected = cb;
+}
+
+void PulseOximeter::setIRLedCurrent(LEDCurrent irLedNewCurrent)
+{
+    irLedCurrent = irLedNewCurrent;
+    hrm.setLedsCurrent(irLedCurrent, (LEDCurrent)redLedCurrentIndex);
 }
 
 void PulseOximeter::checkSample()
@@ -131,19 +151,31 @@ void PulseOximeter::checkCurrentBias()
     // red and IR leds. The numbers are really magic: the less possible to avoid oscillations
     if (millis() - tsLastBiasCheck > CURRENT_ADJUSTMENT_PERIOD_MS) {
         bool changed = false;
-        if (irDCRemover.getDCW() - redDCRemover.getDCW() > 70000 && redLedPower < MAX30100_LED_CURR_50MA) {
-            ++redLedPower;
+        if (irDCRemover.getDCW() - redDCRemover.getDCW() > 70000 && redLedCurrentIndex < MAX30100_LED_CURR_50MA) {
+            ++redLedCurrentIndex;
             changed = true;
-        } else if (redDCRemover.getDCW() - irDCRemover.getDCW() > 70000 && redLedPower > 0) {
-            --redLedPower;
+        } else if (redDCRemover.getDCW() - irDCRemover.getDCW() > 70000 && redLedCurrentIndex > 0) {
+            --redLedCurrentIndex;
             changed = true;
         }
 
         if (changed) {
-            hrm.setLedsCurrent(IR_LED_CURRENT, (LEDCurrent)redLedPower);
+            hrm.setLedsCurrent(irLedCurrent, (LEDCurrent)redLedCurrentIndex);
             tsLastCurrentAdjustment = millis();
         }
 
         tsLastBiasCheck = millis();
+    }
+}
+
+void PulseOximeter::checkTemperature()
+{
+    if (millis() - tsLastTemperaturePoll > TEMPERATURE_SAMPLING_PERIOD_MS) {
+        if (hrm.isTemperatureReady()) {
+            temperature = hrm.retrieveTemperature();
+        }
+        hrm.startTemperatureSampling();
+
+        tsLastTemperaturePoll = millis();
     }
 }
