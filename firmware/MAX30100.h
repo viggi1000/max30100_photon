@@ -1,6 +1,6 @@
 /*
-Port of the Oxullo Interscans library for Particle Photon/Electron.
-Work by Vignesh Ravichandran (hello@rvignesh.xyz).
+Arduino-MAX30100 oximetry / heart rate integrated sensor library
+Copyright (C) 2016  OXullo Intersecans <x@brainrapers.org>
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +41,9 @@ public:
     void setLedsCurrent(LEDCurrent irLedCurrent, LEDCurrent redLedCurrent);
     void setHighresModeEnabled(bool enabled);
     void update();
+    void startTemperatureSampling();
+    bool isTemperatureReady();
+    float retrieveTemperature();
 
     uint16_t rawIRValue;
     uint16_t rawRedValue;
